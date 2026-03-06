@@ -31,6 +31,12 @@ warnings.filterwarnings('ignore')
 plt.style.use('seaborn-v0_8-whitegrid')
 np.random.seed(42)
 
+# Paths
+ROOT_DIR    = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR    = os.path.join(ROOT_DIR, 'dataset', 'dataset')
+FIGURES_DIR = os.path.join(ROOT_DIR, 'figures')
+os.makedirs(FIGURES_DIR, exist_ok=True)
+
 # Activity mapping
 ACTIVITY_MAP = {'Standing': 0, 'Walking': 1, 'Jumping': 2, 'Still': 3}
 ACTIVITY_NAMES = ['Standing', 'Walking', 'Jumping', 'Still']
@@ -52,64 +58,65 @@ print(f"Number of hidden states: {N_STATES}")
 # and Jumping activities. For Still, devices were placed flat on a table.
 
 # %%
-def load_sample(folder_path):
-    """Load and merge accelerometer and gyroscope data from a sample folder."""
-    accel_path = os.path.join(folder_path, 'Accelerometer.csv')
-    gyro_path = os.path.join(folder_path, 'Gyroscope.csv')
-    
-    if not os.path.exists(accel_path) or not os.path.exists(gyro_path):
-        return None
-    
+def load_csv_pair(accel_path, gyro_path):
+    """
+    Load and merge a paired Accelerometer and Gyroscope CSV file.
+
+    The Sensor Logger app exports columns: time, seconds_elapsed, z, y, x
+    We rename axes to accel_x/y/z and gyro_x/y/z for clarity.
+    Merging is done using merge_asof on seconds_elapsed (50 Hz -> 20ms tolerance).
+    """
     accel = pd.read_csv(accel_path)
-    gyro = pd.read_csv(gyro_path)
-    
-    # Rename columns to distinguish sensors
+    gyro  = pd.read_csv(gyro_path)
+
     accel = accel.rename(columns={'x': 'accel_x', 'y': 'accel_y', 'z': 'accel_z'})
-    gyro = gyro.rename(columns={'x': 'gyro_x', 'y': 'gyro_y', 'z': 'gyro_z'})
-    
-    # Merge on nearest timestamp using seconds_elapsed
-    accel = accel[['seconds_elapsed', 'accel_x', 'accel_y', 'accel_z']].copy()
-    gyro = gyro[['seconds_elapsed', 'gyro_x', 'gyro_y', 'gyro_z']].copy()
-    
-    # Merge using merge_asof for nearest timestamp matching
-    accel = accel.sort_values('seconds_elapsed').reset_index(drop=True)
-    gyro = gyro.sort_values('seconds_elapsed').reset_index(drop=True)
-    
+    gyro  = gyro.rename(columns={'x': 'gyro_x',  'y': 'gyro_y',  'z': 'gyro_z'})
+
+    accel = accel[['seconds_elapsed', 'accel_x', 'accel_y', 'accel_z']].sort_values('seconds_elapsed').reset_index(drop=True)
+    gyro  = gyro[['seconds_elapsed',  'gyro_x',  'gyro_y',  'gyro_z']].sort_values('seconds_elapsed').reset_index(drop=True)
+
     merged = pd.merge_asof(accel, gyro, on='seconds_elapsed', tolerance=0.025, direction='nearest')
     merged = merged.dropna().reset_index(drop=True)
-    
     return merged
 
-# Load all data
-data_dir = '/home/claude/data'
+
+# ── Load all data ──────────────────────────────────────────────────────────────
+# Dataset layout: dataset/dataset/{Activity}/{Person}_{Activity}_{N}_Accelerometer.csv
 all_samples = []
 sample_info = []
 
-for folder_name in sorted(os.listdir(data_dir)):
-    folder_path = os.path.join(data_dir, folder_name)
-    if not os.path.isdir(folder_path):
+for activity in sorted(os.listdir(DATA_DIR)):
+    activity_path = os.path.join(DATA_DIR, activity)
+    if not os.path.isdir(activity_path):
         continue
-    
-    # Parse folder name: Person_Activity_Number
-    parts = folder_name.split('_')
-    if len(parts) >= 3:
-        person = parts[0]
-        activity = parts[1]
-        sample_num = parts[2]
-    else:
-        continue
-    
-    df = load_sample(folder_path)
-    if df is not None:
-        df['activity'] = activity
-        df['person'] = person
-        df['sample_id'] = folder_name
+
+    accel_files = sorted(glob.glob(os.path.join(activity_path, '*_Accelerometer.csv')))
+
+    for accel_path in accel_files:
+        gyro_path = accel_path.replace('_Accelerometer.csv', '_Gyroscope.csv')
+        if not os.path.exists(gyro_path):
+            print(f'  [WARN] Missing gyro file for: {os.path.basename(accel_path)}')
+            continue
+
+        basename  = os.path.basename(accel_path).replace('_Accelerometer.csv', '')
+        parts     = basename.split('_')
+        person    = parts[0]
+        sample_id = basename
+
+        df = load_csv_pair(accel_path, gyro_path)
+        if df is None or len(df) < 10:
+            print(f'  [WARN] Skipping {basename}: too few rows')
+            continue
+
+        df['activity']  = activity
+        df['person']    = person
+        df['sample_id'] = sample_id
         all_samples.append(df)
         sample_info.append({
-            'sample_id': folder_name,
-            'person': person,
-            'activity': activity,
-            'n_rows': len(df),
+            'sample_id':  sample_id,
+            'person':     person,
+            'activity':   activity,
+            'n_rows':     len(df),
             'duration_s': df['seconds_elapsed'].max() - df['seconds_elapsed'].min()
         })
 
@@ -168,9 +175,10 @@ for ax in axes[-1]:
     ax.set_xlabel('Time (seconds)')
 
 plt.tight_layout()
-plt.savefig('/home/claude/raw_sensor_data.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'raw_sensor_data.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: raw_sensor_data.png")
+print(f'Figure saved: {out_path}')
 
 # %% [markdown]
 # # 3. Feature Extraction
@@ -403,9 +411,10 @@ for idx, feat in enumerate(key_features):
     ax.legend(fontsize=8)
 
 plt.tight_layout()
-plt.savefig('/home/claude/feature_distributions.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'feature_distributions.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: feature_distributions.png")
+print(f'Figure saved: {out_path}')
 
 # %% [markdown]
 # # 4. Train/Test Split
@@ -869,9 +878,10 @@ ax.set_ylabel('Log-Likelihood', fontsize=12)
 ax.set_title('Baum-Welch Training Convergence', fontsize=14, fontweight='bold')
 ax.grid(True, alpha=0.3)
 plt.tight_layout()
-plt.savefig('/home/claude/convergence_plot.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'convergence_plot.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: convergence_plot.png")
+print(f'Figure saved: {out_path}')
 
 # %% [markdown]
 # # 7. Model Parameters Visualization
@@ -890,9 +900,10 @@ ax.set_xlabel('To State', fontsize=12)
 ax.set_ylabel('From State', fontsize=12)
 ax.set_title('Transition Probability Matrix (A)', fontsize=14, fontweight='bold')
 plt.tight_layout()
-plt.savefig('/home/claude/transition_matrix.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'transition_matrix.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: transition_matrix.png")
+print(f'Figure saved: {out_path}')
 
 print("\nTransition Matrix Interpretation:")
 for i in range(N_STATES):
@@ -915,9 +926,10 @@ for bar, val in zip(bars, hmm.pi):
 ax.set_ylim(0, max(hmm.pi) * 1.2)
 ax.grid(True, alpha=0.3, axis='y')
 plt.tight_layout()
-plt.savefig('/home/claude/initial_probs.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'initial_probs.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: initial_probs.png")
+print(f'Figure saved: {out_path}')
 
 # %% [markdown]
 # ## 7.3 Emission Probability Visualization
@@ -953,9 +965,10 @@ ax.set_title('Emission Parameters: Mean Feature Values per State\n(Top 10 Discri
 ax.legend(fontsize=10)
 ax.grid(True, alpha=0.3, axis='y')
 plt.tight_layout()
-plt.savefig('/home/claude/emission_means.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'emission_means.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: emission_means.png")
+print(f'Figure saved: {out_path}')
 
 # %% [markdown]
 # # 8. Model Evaluation on Unseen Data
@@ -1019,9 +1032,10 @@ ax.set_xlabel('Predicted Activity', fontsize=12)
 ax.set_ylabel('True Activity', fontsize=12)
 ax.set_title('Confusion Matrix (Unseen Test Data)', fontsize=14, fontweight='bold')
 plt.tight_layout()
-plt.savefig('/home/claude/confusion_matrix.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'confusion_matrix.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: confusion_matrix.png")
+print(f'Figure saved: {out_path}')
 
 # %% [markdown]
 # ## 8.2 Performance Metrics
@@ -1102,9 +1116,10 @@ for idx, test_id in enumerate(test_sample_ids):
     ax.grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('/home/claude/decoded_sequences.png', dpi=150, bbox_inches='tight')
+out_path = os.path.join(FIGURES_DIR, 'decoded_sequences.png')
+plt.savefig(out_path, dpi=150, bbox_inches='tight')
 plt.show()
-print("Figure saved: decoded_sequences.png")
+print(f'Figure saved: {out_path}')
 
 # %% [markdown]
 # ## 8.4 Full Training Set Evaluation (Additional Analysis)
