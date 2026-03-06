@@ -96,15 +96,15 @@ Two test recordings were withheld (one per participant, never seen during traini
 
 | State (Activity) | Number of Samples | Sensitivity | Specificity | Overall Accuracy |
 |-----------------|:-----------------:|:-----------:|:-----------:|:----------------:|
-| Standing | — | — | — | — |
-| Walking  | — | — | — | — |
-| Jumping  | — | — | — | — |
-| Still    | — | — | — | — |
+| Standing |  0 | 0.0000 | 1.0000 | 1.0000 |
+| Walking  | 13 | 1.0000 | 1.0000 | 1.0000 |
+| Jumping  | 13 | 1.0000 | 1.0000 | 1.0000 |
+| Still    |  0 | 0.0000 | 1.0000 | 1.0000 |
 
-> Run the notebook to populate this table with live results.
+> Test data: Mitali_Walking_7 (13 windows) and Aubert_Jumping_6 (13 windows) — both never seen during training.
 
-- **Training set accuracy**: 98.09%
-- **Test set accuracy**: 100% (2 unseen samples)
+- **Training set accuracy**: 98.05%
+- **Test set accuracy**: 100.00% (2 unseen samples, 26 windows total)
 
 ---
 
