@@ -22,9 +22,10 @@ HMM-Human-Activity-Recognition/
 │       ├── Still/        # 12 × Accelerometer + 12 × Gyroscope CSV files
 │       └── Walking/      # 13 × Accelerometer + 13 × Gyroscope CSV files
 ├── figures/              # All generated visualisation plots
-├── HMM_Activity_Recognition.ipynb   # Main Jupyter notebook
-├── hmm_activity_recognition.py      # Equivalent Python script
-├── HMM_Report-1.pdf                 # Project report (4–5 pages)
+├── HMM_Activity_Recognition.ipynb                                   # Main Jupyter notebook
+├── hmm_activity_recognition.py                                      # Equivalent Python script
+├── MachineLeaningTechniquesll_HiddenMarkovModels_Group47_Report.docx.pdf       # Project report
+├── MachineLeaningTechniquesll_HiddenMarkovModels__Cohort1_Team47_.xlsx - 1.pdf # Task allocation
 ├── requirements.txt
 └── .gitignore
 ```
